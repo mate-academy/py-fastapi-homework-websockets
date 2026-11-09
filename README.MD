@@ -431,7 +431,7 @@ The project is configured with multiple services in both `docker-compose.yml` an
 ---
 
 ### **6. MinIO Object Storage (`minio`)**
-- **Image**: `minio/minio:latest`
+- **Image**: `pgsty/minio` (community fork; `minio/minio` was removed from Docker Hub)
 - **Purpose**: Provides an **S3-compatible storage** for managing file uploads.
 - **Configuration**:
   - Runs the MinIO server with **console access on port 9001**.
@@ -507,7 +507,7 @@ To support **end-to-end (E2E) testing**, the project includes a **separate testi
 ---
 
 ### **3. Test MinIO Storage (`minio`)**
-- **Image**: `minio/minio:latest`
+- **Image**: `pgsty/minio` (community fork; `minio/minio` was removed from Docker Hub)
 - **Purpose**: Provides **S3-compatible storage** for E2E tests.
 - **Configuration**:
   - Uses **`minio-theater-test`** as the test container name.
