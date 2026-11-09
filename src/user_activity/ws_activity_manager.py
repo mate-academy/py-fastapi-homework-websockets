@@ -24,7 +24,15 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        connections = self.active_connections.setdefault(user_data.user_id, [])
+        is_first_connection = not connections
+        connections.append(websocket)
+
+        if is_first_connection:
+            await self._broadcast(
+                {"event": "user_connected", "user": user_data.model_dump(mode="json")},
+                exclude=user_data.user_id,
+            )
 
     async def disconnect(self, user_id: int, websocket: WebSocket) -> None:
         """
@@ -38,7 +46,16 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        connections = self.active_connections.get(user_id)
+        if not connections:
+            return
+
+        if websocket in connections:
+            connections.remove(websocket)
+
+        if not connections:
+            del self.active_connections[user_id]
+            await self._broadcast({"event": "user_disconnected", "user_id": user_id})
 
     async def _broadcast(self, message: dict, exclude: int = None) -> None:
         """
@@ -51,7 +68,16 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        for user_id, connections in list(self.active_connections.items()):
+            if exclude is not None and user_id == exclude:
+                continue
+            for connection in list(connections):
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    # A dead socket must not break delivery to everyone else;
+                    # it is cleaned up by its own handler on disconnect.
+                    continue
 
     async def send_personal_message(self, message: dict, user_id: int) -> None:
         """
@@ -64,4 +90,8 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        for connection in list(self.active_connections.get(user_id, [])):
+            try:
+                await connection.send_json(message)
+            except Exception:
+                continue
