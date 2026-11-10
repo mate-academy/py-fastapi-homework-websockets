@@ -31,8 +31,14 @@ class UserActivityRepository(UserActivityRepoInterface):
         collection = self.db["user_activity"]
         await collection.update_one(
             {"user_id": user_data.id},
-            {"$set": {"status": "offline", **user_data.model_dump()}},
-            upsert=True
+            {
+                "$set": {
+                    "user_id": user_data.id,
+                    "status": "offline",
+                    **user_data.model_dump(exclude={"id"}),
+                }
+            },
+            upsert=True,
         )
 
     async def update_user_activity(
