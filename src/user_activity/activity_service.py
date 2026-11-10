@@ -49,4 +49,62 @@ class UserActivityService(UserActivityServiceInterface):
         Returns:
             None
         """
-        # Write your code here
+        await websocket.accept()
+        try:
+            data = await asyncio.wait_for(websocket.receive_json(), timeout=30)
+        except asyncio.TimeoutError:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Auth timeout")
+            return
+
+        token = data.get("token")
+        if not token:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Token required")
+            return
+
+        try:
+            payload = self.jwt_auth_manager.decode_access_token(token)
+            user_id = payload["user_id"]
+            if not user_id:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
+                return
+        except (TokenExpiredError, InvalidTokenError, KeyError):
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
+            return
+        user_data = await self.activity_repo.update_user_activity(
+            user_data=UpdateUserActivitySchema(
+                user_id=user_id,
+                status="online",
+                connected_at=datetime.now(timezone.utc)
+            )
+        )
+        await self.activity_ws_manager.connect(websocket=websocket, user_data=user_data)
+
+        users = await self.activity_repo.get_all_active_users()
+
+        message = {
+            "event": "online_users",
+            "users": [user.model_dump(mode="json") for user in users]
+        }
+
+        await self.activity_ws_manager.send_personal_message(
+            message=message,
+            user_id=user_id
+        )
+
+        try:
+            while True:
+                await websocket.receive_json()
+
+        except WebSocketDisconnect:
+            await self.activity_ws_manager.disconnect(
+                user_id=user_id,
+                websocket=websocket
+            )
+
+            await self.activity_repo.update_user_activity(
+                user_data=UpdateUserActivitySchema(
+                    user_id=user_id,
+                    status="offline",
+                    disconnected_at=datetime.now(timezone.utc)
+                )
+            )

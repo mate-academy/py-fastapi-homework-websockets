@@ -24,7 +24,18 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        should_broadcast = False
+        if user_data.user_id not in self.active_connections:
+            self.active_connections[user_data.user_id] = []
+            should_broadcast = True
+
+        self.active_connections[user_data.user_id].append(websocket)
+
+        if should_broadcast:
+            await self._broadcast(
+                {"event": "user_connected", "user": user_data.model_dump(mode="json")},
+                exclude=user_data.user_id,
+            )
 
     async def disconnect(self, user_id: int, websocket: WebSocket) -> None:
         """
@@ -38,9 +49,24 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        connections = self.active_connections.get(user_id)
 
-    async def _broadcast(self, message: dict, exclude: int = None) -> None:
+        if not connections:
+            return
+
+        if websocket in connections:
+            connections.remove(websocket)
+
+        if not connections:
+            del self.active_connections[user_id]
+            await self._broadcast(
+                {
+                    "event": "user_disconnected",
+                    "user_id": user_id
+                }
+            )
+
+    async def _broadcast(self, message: dict, exclude: int | None = None) -> None:
         """
         Send a message to all connected users, optionally skipping one user.
 
@@ -51,7 +77,10 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        for key, val in self.active_connections.items():
+            if exclude != key:
+                for websocket in val:
+                    await websocket.send_json(message)
 
     async def send_personal_message(self, message: dict, user_id: int) -> None:
         """
@@ -64,4 +93,5 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        for websocket in self.active_connections.get(user_id, []):
+            await websocket.send_json(message)

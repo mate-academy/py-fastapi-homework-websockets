@@ -28,7 +28,18 @@ class UserActivityRepository(UserActivityRepoInterface):
         Returns:
             None
         """
-        # Write your code here
+        collection = self.db["user_activity"]
+        await collection.update_one(
+            {"user_id": user_data.id},
+            {
+                "$set": {
+                    "user_id": user_data.id,
+                    "status": "offline",
+                    **user_data.model_dump(exclude={"id"}),
+                }
+            },
+            upsert=True,
+        )
 
     async def update_user_activity(
             self,
@@ -43,7 +54,13 @@ class UserActivityRepository(UserActivityRepoInterface):
         Returns:
             UserActivitySchema: The updated activity record.
         """
-        # Write your code here
+        collection = self.db["user_activity"]
+        await collection.update_one(
+            {"user_id": user_data.user_id},
+            {"$set": user_data.model_dump(exclude_none=True)},
+        )
+        res = await collection.find_one({"user_id": user_data.user_id}, {"_id": 0})
+        return UserActivitySchema.model_validate(res)
 
     async def get_all_active_users(self) -> List[UserActivitySchema]:
         """
@@ -52,4 +69,8 @@ class UserActivityRepository(UserActivityRepoInterface):
         Returns:
             List[UserActivitySchema]: A list of activity records for all online users.
         """
-        # Write your code here
+        collection = self.db["user_activity"]
+        return [
+            UserActivitySchema.model_validate(x) for x
+            in await collection.find({"status": "online"}, {"_id": 0}).to_list(None)
+        ]
