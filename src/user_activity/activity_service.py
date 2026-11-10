@@ -13,6 +13,9 @@ from user_activity.interfaces import (
 )
 
 
+AUTH_TIMEOUT_SECONDS = 30
+
+
 class UserActivityService(UserActivityServiceInterface):
     """Coordinates authentication and lifecycle handling for user activity WebSocket connections."""
 
@@ -49,4 +52,76 @@ class UserActivityService(UserActivityServiceInterface):
         Returns:
             None
         """
-        # Write your code here
+        await websocket.accept()
+
+        # 1. Wait for the auth message: {"token": "..."}
+        try:
+            auth_message = await asyncio.wait_for(
+                websocket.receive_json(),
+                timeout=AUTH_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        except WebSocketDisconnect:
+            return
+        except Exception:
+            # Not valid JSON or another receive error.
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        token = auth_message.get("token") if isinstance(auth_message, dict) else None
+        if not token:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # 2. Validate the token and get the user id.
+        try:
+            payload = self.jwt_auth_manager.decode_access_token(token)
+        except (TokenExpiredError, InvalidTokenError):
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        user_id = payload.get("user_id")
+        if user_id is None:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # 3. Mark the user as online.
+        user_activity = await self.activity_repo.update_user_activity(
+            UpdateUserActivitySchema(
+                user_id=user_id,
+                status="online",
+                connected_at=datetime.now(timezone.utc),
+            )
+        )
+
+        # 4. Register the connection (broadcasts "user_connected" to others).
+        await self.activity_ws_manager.connect(websocket, user_activity)
+
+        try:
+            # 5. Send this user a snapshot of everyone who is online.
+            online_users = await self.activity_repo.get_all_active_users()
+            await self.activity_ws_manager.send_personal_message(
+                {
+                    "event": "online_users",
+                    "users": [user.model_dump(mode="json") for user in online_users],
+                },
+                user_id,
+            )
+
+            # 6. Keep the connection open until the client disconnects.
+            while True:
+                await websocket.receive_json()
+        except WebSocketDisconnect:
+            pass
+        finally:
+            # 7. Cleanup: unregister the socket and mark the user as offline.
+            await self.activity_ws_manager.disconnect(user_id, websocket)
+            await self.activity_repo.update_user_activity(
+                UpdateUserActivitySchema(
+                    user_id=user_id,
+                    status="offline",
+                    disconnected_at=datetime.now(timezone.utc),
+                )
+            )
