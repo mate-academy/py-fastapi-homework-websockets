@@ -30,7 +30,7 @@ class UserActivityRepository(UserActivityRepoInterface):
         """
         collection = self.db["user_activity"]
         await collection.update_one(
-            {"id": user_data.id},
+            {"user_id": user_data.id},
             {"$set": {"status": "offline", **user_data.model_dump()}},
             upsert=True
         )
@@ -50,10 +50,10 @@ class UserActivityRepository(UserActivityRepoInterface):
         """
         collection = self.db["user_activity"]
         await collection.update_one(
-            {"id": user_data.user_id},
+            {"user_id": user_data.user_id},
             {"$set": user_data.model_dump(exclude_none=True)},
         )
-        res = await collection.find_one({"id": user_data.user_id}, {"id": 0})
+        res = await collection.find_one({"user_id": user_data.user_id}, {"_id": 0})
         return UserActivitySchema.model_validate(res)
 
     async def get_all_active_users(self) -> List[UserActivitySchema]:
@@ -66,5 +66,5 @@ class UserActivityRepository(UserActivityRepoInterface):
         collection = self.db["user_activity"]
         return [
             UserActivitySchema.model_validate(x) for x
-            in await collection.find({"status": "online"}, {"id": 0}).to_list(None)
+            in await collection.find({"status": "online"}, {"_id": 0}).to_list(None)
         ]
