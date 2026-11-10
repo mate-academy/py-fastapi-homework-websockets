@@ -5,15 +5,20 @@ from pydantic import HttpUrl
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import get_s3_storage_client, get_jwt_auth_manager
+from config import get_jwt_auth_manager, get_s3_storage_client
 from database import get_db
-from database.models.accounts import UserModel, UserProfileModel, GenderEnum, UserGroupModel, UserGroupEnum
+from database.models.accounts import (
+    GenderEnum,
+    UserGroupEnum,
+    UserGroupModel,
+    UserModel,
+    UserProfileModel,
+)
 from exceptions import BaseSecurityError, S3FileUploadError
 from schemas.profiles import ProfileCreateSchema, ProfileResponseSchema
-from security.interfaces import JWTAuthManagerInterface
 from security.http import get_token
+from security.interfaces import JWTAuthManagerInterface
 from storages import S3StorageInterface
-
 
 router = APIRouter()
 

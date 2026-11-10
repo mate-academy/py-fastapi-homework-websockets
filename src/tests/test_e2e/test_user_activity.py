@@ -1,19 +1,18 @@
+
 import asyncio
 from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from httpx_ws import WebSocketDisconnect
-from starlette import status
+from httpx_ws import AsyncWebSocketSession, WebSocketDisconnect, aconnect_ws
 from httpx_ws.transport import ASGIWebSocketTransport
-from httpx_ws import aconnect_ws, AsyncWebSocketSession
+from pymongo.asynchronous.database import AsyncDatabase
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from pymongo.asynchronous.database import AsyncDatabase
+from starlette import status
 
 from database import ActivationTokenModel
 from main import app
-
 
 WS_PATH = "/api/v1/activity/users/"
 
@@ -34,10 +33,10 @@ async def _receive_json(ws: AsyncWebSocketSession) -> dict:
 
 
 async def _register_activate_and_login(
-        e2e_client: AsyncClient,
-        e2e_db_session: AsyncSession,
-        email: str,
-        password: str = "StrongPass!123"
+    e2e_client: AsyncClient,
+    e2e_db_session: AsyncSession,
+    email: str,
+    password: str = "StrongPass!123",
 ) -> tuple[int, str]:
     """
     Registers a user through the real /accounts/register/ endpoint, pulls the
@@ -76,11 +75,11 @@ async def _register_activate_and_login(
 @pytest.mark.e2e
 @pytest.mark.asyncio
 async def test_two_users_connect_and_receive_connect_and_disconnect_events(
-        e2e_client: AsyncClient,
-        e2e_db_session: AsyncSession,
-        reset_db_once_for_e2e: Any,
-        seed_user_groups: Any,
-        cleanup_mongo_user_activity: Any,
+    e2e_client: AsyncClient,
+    e2e_db_session: AsyncSession,
+    reset_db_once_for_e2e: Any,
+    seed_user_groups: Any,
+    cleanup_mongo_user_activity: Any,
 ) -> None:
     """
     Verify that when two users connect to the activity WebSocket, each user
@@ -105,54 +104,57 @@ async def test_two_users_connect_and_receive_connect_and_disconnect_events(
     )
 
     transport = ASGIWebSocketTransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        async with aconnect_ws(WS_PATH, client) as ws1:
-            await ws1.send_json({"token": token1})
+    async with (
+        AsyncClient(transport=transport, base_url="http://test") as client,
+        aconnect_ws(WS_PATH, client) as ws1,
+    ):
+        await ws1.send_json({"token": token1})
 
-            snapshot1 = await _receive_json(ws1)
-            assert snapshot1["event"] == "online_users", (
-                f"Expected 'online_users' event, got {snapshot1['event']}"
+        snapshot1 = await _receive_json(ws1)
+        assert snapshot1["event"] == "online_users", (
+            f"Expected 'online_users' event, got {snapshot1['event']}"
+        )
+        assert user1_id in [user["user_id"] for user in snapshot1["users"]], (
+            "User1 should be present in the initial online users snapshot"
+        )
+
+        async with aconnect_ws(WS_PATH, client) as ws2:
+            await ws2.send_json({"token": token2})
+
+            user1_connected_event = await _receive_json(ws1)
+            assert user1_connected_event["event"] == "user_connected", (
+                f"Expected 'user_connected' event, got {user1_connected_event['event']}"
             )
-            assert user1_id in [user["user_id"] for user in snapshot1["users"]], (
-                "User1 should be present in the initial online users snapshot"
+            assert user1_connected_event["user"]["user_id"] == user2_id, (
+                "User1 should be notified that user2 connected"
             )
 
-            async with aconnect_ws(WS_PATH, client) as ws2:
-                await ws2.send_json({"token": token2})
-
-                user1_connected_event = await _receive_json(ws1)
-                assert user1_connected_event["event"] == "user_connected", (
-                    f"Expected 'user_connected' event, got {user1_connected_event['event']}"
-                )
-                assert user1_connected_event["user"]["user_id"] == user2_id, (
-                    "User1 should be notified that user2 connected"
-                )
-
-                snapshot2 = await _receive_json(ws2)
-                assert snapshot2["event"] == "online_users", (
-                    f"Expected 'online_users' event, got {snapshot2['event']}"
-                )
-                assert {user["user_id"] for user in snapshot2["users"]} == {user1_id, user2_id}, (
-                    "User2's snapshot should contain both online users"
-                )
-
-            user1_disconnected_event = await _receive_json(ws1)
-            assert user1_disconnected_event["event"] == "user_disconnected", (
-                f"Expected 'user_disconnected' event, got {user1_disconnected_event['event']}"
+            snapshot2 = await _receive_json(ws2)
+            assert snapshot2["event"] == "online_users", (
+                f"Expected 'online_users' event, got {snapshot2['event']}"
             )
-            assert user1_disconnected_event["user_id"] == user2_id, (
-                "User1 should be notified that user2 disconnected"
-            )
+            assert {user["user_id"] for user in snapshot2["users"]} == {
+                user1_id,
+                user2_id,
+            }, "User2's snapshot should contain both online users"
+
+        user1_disconnected_event = await _receive_json(ws1)
+        assert user1_disconnected_event["event"] == "user_disconnected", (
+            f"Expected 'user_disconnected' event, got {user1_disconnected_event['event']}"
+        )
+        assert user1_disconnected_event["user_id"] == user2_id, (
+            "User1 should be notified that user2 disconnected"
+        )
 
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
 async def test_invalid_token_closes_connection_with_policy_violation(
-        e2e_client: AsyncClient,
-        e2e_db_session: AsyncSession,
-        reset_db_once_for_e2e: Any,
-        seed_user_groups: Any,
-        cleanup_mongo_user_activity: Any,
+    e2e_client: AsyncClient,
+    e2e_db_session: AsyncSession,
+    reset_db_once_for_e2e: Any,
+    seed_user_groups: Any,
+    cleanup_mongo_user_activity: Any,
 ) -> None:
     """
     If the client sends a malformed/invalid JWT as the auth message,
@@ -160,29 +162,31 @@ async def test_invalid_token_closes_connection_with_policy_violation(
     and never register the connection.
     """
     transport = ASGIWebSocketTransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        async with aconnect_ws(WS_PATH, client) as ws:
-            await ws.send_json({"token": "invalid_token"})
+    async with (
+        AsyncClient(transport=transport, base_url="http://test") as client,
+        aconnect_ws(WS_PATH, client) as ws,
+    ):
+        await ws.send_json({"token": "invalid_token"})
 
-            with pytest.raises(WebSocketDisconnect) as exc_info:
-                await _receive_json(ws)
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            await _receive_json(ws)
 
-            assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION, (
-                f"An invalid JWT must close the socket with "
-                f"{status.WS_1008_POLICY_VIOLATION} (policy violation), "
-                f"got close code {exc_info.value.code}"
-            )
+        assert exc_info.value.code == status.WS_1008_POLICY_VIOLATION, (
+            f"An invalid JWT must close the socket with "
+            f"{status.WS_1008_POLICY_VIOLATION} (policy violation), "
+            f"got close code {exc_info.value.code}"
+        )
 
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
 async def test_user_activity_persisted_in_mongo(
-        e2e_client: AsyncClient,
-        e2e_db_session: AsyncSession,
-        mongo_db: AsyncDatabase,
-        reset_db_once_for_e2e: Any,
-        seed_user_groups: Any,
-        cleanup_mongo_user_activity: Any,
+    e2e_client: AsyncClient,
+    e2e_db_session: AsyncSession,
+    mongo_db: AsyncDatabase,
+    reset_db_once_for_e2e: Any,
+    seed_user_groups: Any,
+    cleanup_mongo_user_activity: Any,
 ) -> None:
     """
     On connect the user's activity doc must flip to "online" with a
@@ -202,7 +206,9 @@ async def test_user_activity_persisted_in_mongo(
                 f"got {snapshot['event']!r}"
             )
 
-            record = await mongo_db["user_activity"].find_one({"user_id": user_id}, {"_id": 0})
+            record = await mongo_db["user_activity"].find_one(
+                {"user_id": user_id}, {"_id": 0}
+            )
             assert record is not None, (
                 f"An activity document for user {user_id} should exist in Mongo "
                 f"once the WebSocket connection is established"
@@ -218,7 +224,9 @@ async def test_user_activity_persisted_in_mongo(
 
         await asyncio.sleep(0.2)
 
-        record = await mongo_db["user_activity"].find_one({"user_id": user_id}, {"_id": 0})
+        record = await mongo_db["user_activity"].find_one(
+            {"user_id": user_id}, {"_id": 0}
+        )
         assert record["status"] == "offline", (
             f"User {user_id} should be marked 'offline' after the socket closes, "
             f"got {record['status']!r}"
@@ -232,11 +240,11 @@ async def test_user_activity_persisted_in_mongo(
 @pytest.mark.e2e
 @pytest.mark.asyncio
 async def test_second_connection_same_user_does_not_rebroadcast(
-        e2e_client: AsyncClient,
-        e2e_db_session: AsyncSession,
-        reset_db_once_for_e2e: Any,
-        seed_user_groups: Any,
-        cleanup_mongo_user_activity: Any,
+    e2e_client: AsyncClient,
+    e2e_db_session: AsyncSession,
+    reset_db_once_for_e2e: Any,
+    seed_user_groups: Any,
+    cleanup_mongo_user_activity: Any,
 ) -> None:
     """
     A single user opening a second tab (second websocket) must not
@@ -246,44 +254,46 @@ async def test_second_connection_same_user_does_not_rebroadcast(
     user1_id, token1 = await _register_activate_and_login(
         e2e_client, e2e_db_session, email="two_tabs@example.com"
     )
-    user2_id, token2 = await _register_activate_and_login(
+    _, token2 = await _register_activate_and_login(
         e2e_client, e2e_db_session, email="observer@example.com"
     )
 
     transport = ASGIWebSocketTransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        async with aconnect_ws(WS_PATH, client) as observer_ws:
-            await observer_ws.send_json({"token": token2})
-            await _receive_json(observer_ws)
+    async with (
+        AsyncClient(transport=transport, base_url="http://test") as client,
+        aconnect_ws(WS_PATH, client) as observer_ws,
+    ):
+        await observer_ws.send_json({"token": token2})
+        await _receive_json(observer_ws)
 
-            async with aconnect_ws(WS_PATH, client) as tab1:
-                await tab1.send_json({"token": token1})
-                event = await _receive_json(observer_ws)
-                assert event["event"] == "user_connected", (
-                    f"The observer should receive 'user_connected' when user "
-                    f"{user1_id} opens the first tab, got {event['event']!r}"
-                )
-                assert event["user"]["user_id"] == user1_id, (
-                    f"The 'user_connected' event should refer to user {user1_id}, "
-                    f"got {event['user']['user_id']}"
-                )
+        async with aconnect_ws(WS_PATH, client) as tab1:
+            await tab1.send_json({"token": token1})
+            event = await _receive_json(observer_ws)
+            assert event["event"] == "user_connected", (
+                f"The observer should receive 'user_connected' when user "
+                f"{user1_id} opens the first tab, got {event['event']!r}"
+            )
+            assert event["user"]["user_id"] == user1_id, (
+                f"The 'user_connected' event should refer to user {user1_id}, "
+                f"got {event['user']['user_id']}"
+            )
 
-                async with aconnect_ws(WS_PATH, client) as tab2:
-                    await tab2.send_json({"token": token1})
-                    await _receive_json(tab2)
-
-                    with pytest.raises(asyncio.TimeoutError):
-                        await asyncio.wait_for(observer_ws.receive_json(), timeout=1.0)
+            async with aconnect_ws(WS_PATH, client) as tab2:
+                await tab2.send_json({"token": token1})
+                await _receive_json(tab2)
 
                 with pytest.raises(asyncio.TimeoutError):
                     await asyncio.wait_for(observer_ws.receive_json(), timeout=1.0)
 
-            disconnect_event = await _receive_json(observer_ws)
-            assert disconnect_event["event"] == "user_disconnected", (
-                f"The observer should receive 'user_disconnected' once user "
-                f"{user1_id} closes the last tab, got {disconnect_event['event']!r}"
-            )
-            assert disconnect_event["user_id"] == user1_id, (
-                f"The 'user_disconnected' event should refer to user {user1_id}, "
-                f"got {disconnect_event['user_id']}"
-            )
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(observer_ws.receive_json(), timeout=1.0)
+
+        disconnect_event = await _receive_json(observer_ws)
+        assert disconnect_event["event"] == "user_disconnected", (
+            f"The observer should receive 'user_disconnected' once user "
+            f"{user1_id} closes the last tab, got {disconnect_event['event']!r}"
+        )
+        assert disconnect_event["user_id"] == user1_id, (
+            f"The 'user_disconnected' event should refer to user {user1_id}, "
+            f"got {disconnect_event['user_id']}"
+        )

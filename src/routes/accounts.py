@@ -1,44 +1,44 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
-from fastapi import APIRouter, Depends, status, HTTPException
-from sqlalchemy import select, delete
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from config import (
+    BaseAppSettings,
+    get_accounts_email_notificator,
     get_jwt_auth_manager,
     get_settings,
-    BaseAppSettings,
-    get_accounts_email_notificator
 )
 from database import (
-    get_db,
-    UserModel,
-    UserGroupModel,
-    UserGroupEnum,
     ActivationTokenModel,
     PasswordResetTokenModel,
-    RefreshTokenModel
+    RefreshTokenModel,
+    UserGroupEnum,
+    UserGroupModel,
+    UserModel,
+    get_db,
 )
-from user_activity.dependencies import get_user_activity_repository
 from exceptions import BaseSecurityError
 from notifications import EmailSenderInterface
 from schemas import (
+    MessageResponseSchema,
+    PasswordResetCompleteRequestSchema,
+    PasswordResetRequestSchema,
+    TokenRefreshRequestSchema,
+    TokenRefreshResponseSchema,
+    UserActivationRequestSchema,
+    UserLoginRequestSchema,
+    UserLoginResponseSchema,
     UserRegistrationRequestSchema,
     UserRegistrationResponseSchema,
-    MessageResponseSchema,
-    UserActivationRequestSchema,
-    PasswordResetRequestSchema,
-    PasswordResetCompleteRequestSchema,
-    UserLoginResponseSchema,
-    UserLoginRequestSchema,
-    TokenRefreshRequestSchema,
-    TokenRefreshResponseSchema
 )
 from schemas.user_activity import UserBaseDTO
 from security.interfaces import JWTAuthManagerInterface
+from user_activity.dependencies import get_user_activity_repository
 from user_activity.interfaces import UserActivityRepoInterface
 
 router = APIRouter()
@@ -215,8 +215,8 @@ async def activate_account(
     result = await db.execute(stmt)
     token_record = result.scalars().first()
 
-    now_utc = datetime.now(timezone.utc)
-    if not token_record or cast(datetime, token_record.expires_at).replace(tzinfo=timezone.utc) < now_utc:
+    now_utc = datetime.now(UTC)
+    if not token_record or cast(datetime, token_record.expires_at).replace(tzinfo=UTC) < now_utc:
         if token_record:
             await db.delete(token_record)
             await db.commit()
@@ -392,8 +392,8 @@ async def reset_password(
             detail="Invalid email or token."
         )
 
-    expires_at = cast(datetime, token_record.expires_at).replace(tzinfo=timezone.utc)
-    if expires_at < datetime.now(timezone.utc):
+    expires_at = cast(datetime, token_record.expires_at).replace(tzinfo=UTC)
+    if expires_at < datetime.now(UTC):
         await db.run_sync(lambda s: s.delete(token_record))
         await db.commit()
         raise HTTPException(

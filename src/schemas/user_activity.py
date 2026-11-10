@@ -1,7 +1,6 @@
 from datetime import datetime
-from typing import Optional
 
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class UserBaseDTO(BaseModel):
@@ -14,8 +13,8 @@ class UserBaseDTO(BaseModel):
 class UpdateUserActivitySchema(BaseModel):
     user_id: int
     status: str
-    connected_at: Optional[datetime] = None
-    disconnected_at: Optional[datetime] = None
+    connected_at: datetime | None = None
+    disconnected_at: datetime | None = None
 
 
 class UserActivitySchema(UpdateUserActivitySchema):

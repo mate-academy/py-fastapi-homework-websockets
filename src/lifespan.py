@@ -3,8 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pymongo import AsyncMongoClient
 
-from user_activity.ws_activity_manager import UserActivityWebSocketManager
 from config import get_settings
+from user_activity.ws_activity_manager import UserActivityWebSocketManager
 
 
 @asynccontextmanager

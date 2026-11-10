@@ -1,10 +1,12 @@
 #!/bin/sh
 
 echo "Waiting for MinIO to be ready..."
-sleep 5
 
 echo "Configuring MinIO Client..."
-mc alias set minio http://"$MINIO_HOST":"$MINIO_PORT" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+until mc alias set minio http://"$MINIO_HOST":"$MINIO_PORT" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+    echo "MinIO is not ready yet, retrying..."
+    sleep 2
+done
 
 if mc ls minio | grep -q "$MINIO_STORAGE"; then
     echo "Bucket '$MINIO_STORAGE' already exists. Skipping creation."

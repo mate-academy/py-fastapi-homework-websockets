@@ -1,13 +1,13 @@
 from datetime import date
 
-from fastapi import UploadFile, Form, File, HTTPException
-from pydantic import BaseModel, field_validator, HttpUrl
+from fastapi import File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, HttpUrl, field_validator
 
 from validation import (
-    validate_name,
-    validate_image,
+    validate_birth_date,
     validate_gender,
-    validate_birth_date
+    validate_image,
+    validate_name,
 )
 
 

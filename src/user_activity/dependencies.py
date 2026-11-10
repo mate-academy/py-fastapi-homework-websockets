@@ -1,15 +1,17 @@
 from typing import Annotated
 
-from fastapi import Depends, WebSocket, Request
+from fastapi import Depends, Request, WebSocket
 from pymongo.asynchronous.database import AsyncDatabase
 
-from config import get_settings, get_jwt_auth_manager
+from config import get_jwt_auth_manager, get_settings
 from security.interfaces import JWTAuthManagerInterface
 from user_activity.activity_repo import UserActivityRepository
 from user_activity.activity_service import UserActivityService
-from user_activity.interfaces import UserActivityWebSocketManagerInterface, UserActivityRepoInterface
+from user_activity.interfaces import (
+    UserActivityRepoInterface,
+    UserActivityWebSocketManagerInterface,
+)
 from user_activity.ws_activity_manager import UserActivityWebSocketManager
-
 
 settings = get_settings()
 

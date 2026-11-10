@@ -1,24 +1,24 @@
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import get_settings, get_accounts_email_notificator, get_s3_storage_client
+from config import get_accounts_email_notificator, get_s3_storage_client, get_settings
 from database import (
-    reset_database,
-    get_db_contextmanager,
     UserGroupEnum,
-    UserGroupModel
+    UserGroupModel,
+    get_db_contextmanager,
+    reset_database,
 )
 from database.populate import CSVDatabaseSeeder
 from main import app
 from security.interfaces import JWTAuthManagerInterface
 from security.token_manager import JWTAuthManager
 from storages import S3StorageClient
-from tests.doubles.fakes.storage import FakeS3Storage
 from tests.doubles.fakes.activity import FakeUserActivityRepo
+from tests.doubles.fakes.storage import FakeS3Storage
 from tests.doubles.stubs.emails import StubEmailSender
-from user_activity.dependencies import get_mongo_db, get_user_activity_repository
+from user_activity.dependencies import get_user_activity_repository
 
 
 def pytest_configure(config):

@@ -1,12 +1,14 @@
 import logging
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 import aiosmtplib
 from jinja2 import Environment, FileSystemLoader
 
 from exceptions import BaseEmailError
 from notifications.interfaces import EmailSenderInterface
+
+logger = logging.getLogger(__name__)
 
 
 class EmailSender(EmailSenderInterface):
@@ -63,7 +65,7 @@ class EmailSender(EmailSenderInterface):
             await smtp.sendmail(self._email, [recipient], message.as_string())
             await smtp.quit()
         except aiosmtplib.SMTPException as error:
-            logging.error(f"Failed to send email to {recipient}: {error}")
+            logger.error("Failed to send email to %s: %s", recipient, error)
             raise BaseEmailError(f"Failed to send email to {recipient}: {error}")
 
     async def send_activation_email(self, email: str, activation_link: str) -> None:

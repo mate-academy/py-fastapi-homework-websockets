@@ -1,12 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import List
 
 from fastapi import WebSocket
 
 from schemas.user_activity import (
-    UserBaseDTO,
     UpdateUserActivitySchema,
-    UserActivitySchema
+    UserActivitySchema,
+    UserBaseDTO,
 )
 
 
@@ -24,10 +23,9 @@ class UserActivityRepoInterface(ABC):
         Returns:
             None
         """
-        pass
 
     @abstractmethod
-    async def update_user_activity(self, user_data: UpdateUserActivitySchema) -> UpdateUserActivitySchema:
+    async def update_user_activity(self, user_data: UpdateUserActivitySchema) -> UserActivitySchema:
         """
         Update a user's activity status.
 
@@ -37,17 +35,15 @@ class UserActivityRepoInterface(ABC):
         Returns:
             UserActivitySchema: The updated activity record.
         """
-        pass
 
     @abstractmethod
-    async def get_all_active_users(self) -> List[UserActivitySchema]:
+    async def get_all_active_users(self) -> list[UserActivitySchema]:
         """
         Retrieve all currently online users.
 
         Returns:
             List[UserActivitySchema]: Activity records for all online users.
         """
-        pass
 
 
 class UserActivityWebSocketManagerInterface(ABC):
@@ -65,7 +61,6 @@ class UserActivityWebSocketManagerInterface(ABC):
         Returns:
             None
         """
-        pass
 
     @abstractmethod
     async def disconnect(self, user_id: int, websocket: WebSocket) -> None:
@@ -77,12 +72,15 @@ class UserActivityWebSocketManagerInterface(ABC):
             websocket (WebSocket): The WebSocket connection to remove.
 
         Returns:
-             None
+            None
         """
-        pass
 
     @abstractmethod
-    async def _broadcast(self, message: dict, exclude: int = None) -> None:
+    async def _broadcast(
+        self,
+        message: dict,
+        exclude: int | None = None,
+    ) -> None:
         """
         Broadcast a message to all connected users, optionally excluding one user.
 
@@ -93,7 +91,6 @@ class UserActivityWebSocketManagerInterface(ABC):
         Returns:
             None
         """
-        pass
 
     @abstractmethod
     async def send_personal_message(self, message: dict, user_id: int) -> None:
@@ -107,7 +104,6 @@ class UserActivityWebSocketManagerInterface(ABC):
         Returns:
             None
         """
-        pass
 
 
 class UserActivityServiceInterface(ABC):
@@ -123,4 +119,3 @@ class UserActivityServiceInterface(ABC):
         Returns:
             None
         """
-        pass
