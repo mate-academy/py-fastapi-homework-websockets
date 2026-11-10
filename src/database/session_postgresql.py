@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+from database import Base
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool  # <--- 1. Імпортуємо NullPool
 
 from config import get_settings
 
@@ -11,7 +13,14 @@ settings = get_settings()
 
 POSTGRESQL_DATABASE_URL = (f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@"
                            f"{settings.POSTGRES_HOST}:{settings.POSTGRES_DB_PORT}/{settings.POSTGRES_DB}")
-postgresql_engine = create_async_engine(POSTGRESQL_DATABASE_URL, echo=False)
+
+# <--- 2. Додаємо poolclass=NullPool для ізоляції з'єднань у тестах
+postgresql_engine = create_async_engine(
+    POSTGRESQL_DATABASE_URL,
+    echo=False,
+    poolclass=NullPool
+)
+
 AsyncPostgresqlSessionLocal = sessionmaker(  # type: ignore
     bind=postgresql_engine,
     class_=AsyncSession,
@@ -49,3 +58,13 @@ async def get_postgresql_db_contextmanager() -> AsyncGenerator[AsyncSession, Non
     """
     async with AsyncPostgresqlSessionLocal() as session:
         yield session
+
+
+async def reset_database() -> None:
+    """
+    Reset the PostgreSQL database.
+    Drops all existing tables and recreates them to ensure test isolation.
+    """
+    async with postgresql_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)

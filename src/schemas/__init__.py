@@ -17,3 +17,8 @@ from schemas.accounts import (
     TokenRefreshRequestSchema,
     TokenRefreshResponseSchema
 )
+from schemas.user_activity import (
+    UserBaseDTO,
+    UpdateUserActivitySchema,
+    UserActivitySchema
+)

@@ -1,67 +1,58 @@
+from typing import Dict, List, Optional
 from fastapi import WebSocket
-from typing import Dict, List
-
-from schemas.user_activity import UserActivitySchema
-from user_activity.interfaces import UserActivityWebSocketManagerInterface
+from schemas import UserActivitySchema
 
 
-class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
-    """In-memory implementation of the WebSocket connection manager for user activity tracking."""
-
-    def __init__(self) -> None:
-        """Initialize an empty mapping of user IDs to their active WebSocket connections."""
+class UserActivityWebSocketManager:
+    def __init__(self):
+        # Dict[user_id, List[WebSocket]]
         self.active_connections: Dict[int, List[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, user_data: UserActivitySchema) -> None:
-        """
-        Register a new WebSocket connection for a user and broadcast a
-        "user_connected" event if this is the user's first active connection.
+        user_id = user_data.user_id
+        is_first_connection = user_id not in self.active_connections or not self.active_connections[user_id]
 
-        Args:
-            websocket (WebSocket): The WebSocket connection to register.
-            user_data (UserActivitySchema): The connecting user's activity data.
+        if user_id not in self.active_connections:
+            self.active_connections[user_id] = []
+        self.active_connections[user_id].append(websocket)
 
-        Returns:
-            None
-        """
-        # Write your code here
+        if is_first_connection:
+            message = {
+                "event": "user_connected",
+                "user": user_data.model_dump(mode="json"),
+            }
+            await self._broadcast(message, exclude=user_id)
 
     async def disconnect(self, user_id: int, websocket: WebSocket) -> None:
-        """
-        Remove a WebSocket connection for a user and broadcast a
-        "user_disconnected" event once the user has no active connections left.
+        if user_id in self.active_connections:
+            if websocket in self.active_connections[user_id]:
+                self.active_connections[user_id].remove(websocket)
 
-        Args:
-            user_id (int): The ID of the disconnecting user.
-            websocket (WebSocket): The WebSocket connection to remove.
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+                message = {
+                    "event": "user_disconnected",
+                    "user_id": user_id,
+                }
+                await self._broadcast(message)
 
-        Returns:
-            None
-        """
-        # Write your code here
+    async def _broadcast(self, message: dict, exclude: Optional[int] = None) -> None:
 
-    async def _broadcast(self, message: dict, exclude: int = None) -> None:
-        """
-        Send a message to all connected users, optionally skipping one user.
-
-        Args:
-            message (dict): The message payload to broadcast.
-            exclude (Optional[int]): User ID to exclude from the broadcast, if any.
-
-        Returns:
-            None
-        """
-        # Write your code here
+        for u_id, sockets in list(self.active_connections.items()):
+            if u_id == exclude:
+                continue
+            for ws in list(sockets):
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    if ws in sockets:
+                        sockets.remove(ws)
 
     async def send_personal_message(self, message: dict, user_id: int) -> None:
-        """
-        Send a message to all active connections belonging to a single user.
 
-        Args:
-            message (dict): The message payload to send.
-            user_id (int): The ID of the target user.
-
-        Returns:
-            None
-        """
-        # Write your code here
+        if user_id in self.active_connections:
+            for ws in list(self.active_connections[user_id]):
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    pass

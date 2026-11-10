@@ -980,7 +980,7 @@ async def test_refresh_access_token_user_not_found(client, db_session, jwt_manag
     refresh_token = jwt_manager.create_refresh_token({"user_id": invalid_user_id})
 
     refresh_token_record = RefreshTokenModel.create(
-        user_id=invalid_user_id,
+        user_id=user.id,
         days_valid=7,
         token=refresh_token
     )

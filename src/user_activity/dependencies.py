@@ -130,7 +130,7 @@ def get_user_activity_service(
         UserActivityService: A fully configured user activity service instance.
     """
     return UserActivityService(
-        manager=activity_ws_manager,
+        ws_manager=activity_ws_manager,
         activity_repo=activity_repo,
         jwt_auth_manager=auth_manager
     )
