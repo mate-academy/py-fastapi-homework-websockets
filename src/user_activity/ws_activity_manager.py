@@ -1,5 +1,6 @@
-from fastapi import WebSocket
 from typing import Dict, List
+
+from fastapi import WebSocket
 
 from schemas.user_activity import UserActivitySchema
 from user_activity.interfaces import UserActivityWebSocketManagerInterface
@@ -24,7 +25,15 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        if user_data.user_id not in self.active_connections:
+            self.active_connections[user_data.user_id] = []
+            payload = {
+                "event": "user_connected",
+                "user": user_data.model_dump(mode="json")
+            }
+            await self._broadcast(payload, exclude=user_data.user_id)
+
+        self.active_connections[user_data.user_id].append(websocket)
 
     async def disconnect(self, user_id: int, websocket: WebSocket) -> None:
         """
@@ -38,7 +47,15 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        user_websockets = self.active_connections[user_id]
+        user_websockets.remove(websocket)
+        if not user_websockets:
+            del self.active_connections[user_id]
+            payload = {
+                "event": "user_disconnected",
+                "user_id": user_id
+            }
+            await self._broadcast(payload)
 
     async def _broadcast(self, message: dict, exclude: int = None) -> None:
         """
@@ -51,7 +68,9 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        for user_id in self.active_connections:
+            if user_id != exclude:
+                await self.send_personal_message(message=message, user_id=user_id)
 
     async def send_personal_message(self, message: dict, user_id: int) -> None:
         """
@@ -64,4 +83,5 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        for websocket in self.active_connections[user_id]:
+            await websocket.send_json(message)
