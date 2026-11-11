@@ -24,7 +24,15 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        self.active_connections.setdefault(user_data.user_id, []).append(websocket)
+        if len(self.active_connections[user_data.user_id]) == 1:
+            await self._broadcast(
+                {
+                    "event": "user_connected",
+                    "user": user_data.model_dump(mode="json")
+                },
+                user_data.user_id,
+            )
 
     async def disconnect(self, user_id: int, websocket: WebSocket) -> None:
         """
@@ -38,7 +46,15 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        if websocket in self.active_connections.get(user_id, []):
+
+            if len(self.active_connections[user_id]) > 1:
+                self.active_connections[user_id].remove(websocket)
+            else:
+                self.active_connections.pop(user_id)
+                await self._broadcast({"event": "user_disconnected", "user_id": user_id})
+
+        return
 
     async def _broadcast(self, message: dict, exclude: int = None) -> None:
         """
@@ -51,7 +67,11 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        for user_id, websockets in self.active_connections.items():
+            if user_id == exclude:
+                continue
+            for websocket in websockets:
+                await websocket.send_json(message)
 
     async def send_personal_message(self, message: dict, user_id: int) -> None:
         """
@@ -64,4 +84,6 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        websockets = self.active_connections[user_id]
+        for websocket in websockets:
+            await websocket.send_json(message)
