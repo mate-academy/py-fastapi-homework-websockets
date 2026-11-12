@@ -24,7 +24,7 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        connections = self.active_connections.setdefault(user_data.id, [])
+        connections = self.active_connections.setdefault(user_data.user_id, [])
         connections.append(websocket)
         if len(connections) == 1:
             await self._broadcast(
@@ -50,6 +50,7 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         if websocket in connections:
             connections.remove(websocket)
         if not connections:
+            del self.active_connections[user_id]
             await self._broadcast(
                 {
                     "event": "user_disconnected",

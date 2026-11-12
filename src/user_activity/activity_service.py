@@ -50,8 +50,9 @@ class UserActivityService(UserActivityServiceInterface):
             None
         """
         await websocket.accept()
+
         try:
-            auth_message = await asyncio.wait_for(websocket.receive(), timeout=30)
+            auth_message = await asyncio.wait_for(websocket.receive_json(), timeout=30)
         except WebSocketDisconnect:
             return
         except (asyncio.TimeoutError, ValueError):
@@ -65,12 +66,12 @@ class UserActivityService(UserActivityServiceInterface):
 
         try:
             payload = self.jwt_auth_manager.decode_access_token(token)
-        except (InvalidTokenError, TokenExpiredError):
+        except (TokenExpiredError, InvalidTokenError):
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
         user_id = payload.get("user_id")
-        if not user_id:
+        if user_id is None:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
@@ -78,35 +79,30 @@ class UserActivityService(UserActivityServiceInterface):
             UpdateUserActivitySchema(
                 user_id=user_id,
                 status="online",
-                connected_at=datetime.now(timezone.utc)
+                connected_at=datetime.now(timezone.utc),
             )
         )
-
-        await self.activity_ws_manager.connect(
-            websocket,
-            user_activity
-        )
+        await self.activity_ws_manager.connect(websocket, user_activity)
 
         try:
-            activity_users = await self.activity_repo.get_all_active_users()
+            active_users = await self.activity_repo.get_all_active_users()
             await self.activity_ws_manager.send_personal_message(
                 {
                     "event": "online_users",
-                    "users": [user.model_dump(mode="json") for user in activity_users]
+                    "users": [user.model_dump(mode="json") for user in active_users],
                 },
-                user_id
+                user_id,
             )
             while True:
                 await websocket.receive_json()
-        except WebSocketDisconnect:
-            await self.activity_ws_manager.disconnect(
-                user_id,
-                websocket
-            )
+        except (WebSocketDisconnect, ValueError):
+            pass
+        finally:
+            await self.activity_ws_manager.disconnect(user_id, websocket)
             await self.activity_repo.update_user_activity(
                 UpdateUserActivitySchema(
                     user_id=user_id,
                     status="offline",
-                    disconnected_at=datetime.now(timezone.utc)
+                    disconnected_at=datetime.now(timezone.utc),
                 )
             )

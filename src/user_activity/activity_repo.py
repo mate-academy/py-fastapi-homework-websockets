@@ -17,7 +17,7 @@ class UserActivityRepository(UserActivityRepoInterface):
             db (AsyncDatabase): The Motor async MongoDB database instance.
         """
         self.db = db
-        self.collections = db["user_activity"]
+        self.collection = db["user_activity"]
 
     async def create_user_activity(self, user_data: UserBaseDTO) -> None:
         """
@@ -29,18 +29,18 @@ class UserActivityRepository(UserActivityRepoInterface):
         Returns:
             None
         """
-        await self.collections.update_one(
-            {"used_id": user_data["user_id"]},
+        await self.collection.update_one(
+            {"user_id": user_data.id},
             {
                 "$set": {
-                    "user_id": user_data["user_id"],
-                    "email": user_data["email"],
+                    "user_id": user_data.id,
+                    "email": user_data.email,
                     "status": "offline",
                     "connected_at": None,
-                    "disconnected_at": None
+                    "disconnected_at": None,
                 }
             },
-            upsert=True
+            upsert=True,
         )
 
     async def update_user_activity(
@@ -56,17 +56,12 @@ class UserActivityRepository(UserActivityRepoInterface):
         Returns:
             UserActivitySchema: The updated activity record.
         """
-        await self.collections.update_one(
-            {"user_id": user_data["user_id"]},
-            {
-                "$set": {user_data.model_dump(exclude_none=True)}
-            },
-            upsert=True
+        await self.collection.update_one(
+            {"user_id": user_data.user_id},
+            {"$set": user_data.model_dump(exclude_none=True)},
+            upsert=True,
         )
-        document = await self.collections.find_one(
-            {"user_id": user_data["user_id"]},
-            {"_id": 0}
-        )
+        document = await self.collection.find_one({"user_id": user_data.user_id}, {"_id": 0})
         return UserActivitySchema.model_validate(document)
 
     async def get_all_active_users(self) -> List[UserActivitySchema]:
@@ -76,11 +71,5 @@ class UserActivityRepository(UserActivityRepoInterface):
         Returns:
             List[UserActivitySchema]: A list of activity records for all online users.
         """
-        cursor = self.collections.find(
-            {"status": "online"},
-            {"_id": 0}
-        )
-        return [
-            UserActivitySchema.model_validate(document)
-            for document in cursor
-        ]
+        cursor = self.collection.find({"status": "online"}, {"_id": 0})
+        return [UserActivitySchema.model_validate(document) async for document in cursor]
