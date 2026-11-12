@@ -24,7 +24,13 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        connections = self.active_connections.setdefault(user_data.user_id, [])
+        connections.append(websocket)
+        if len(connections) == 1:
+            await self._broadcast(
+                {"event": "user_connected", "user": user_data.model_dump(mode="json")},
+                exclude=user_data.user_id,
+            )
 
     async def disconnect(self, user_id: int, websocket: WebSocket) -> None:
         """
@@ -38,7 +44,20 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        connections = self.active_connections.get(user_id)
+        if connections is None:
+            return
+        if websocket in connections:
+            connections.remove(websocket)
+        if not connections:
+            del self.active_connections[user_id]
+            await self._broadcast(
+                {
+                    "event": "user_disconnected",
+                    "user_id": user_id,
+
+                }
+            )
 
     async def _broadcast(self, message: dict, exclude: int = None) -> None:
         """
@@ -51,7 +70,14 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        for user_id, connections in self.active_connections.items():
+            if user_id == exclude:
+                continue
+            for connection in list(connections):
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    pass
 
     async def send_personal_message(self, message: dict, user_id: int) -> None:
         """
@@ -64,4 +90,8 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        for connection in list(self.active_connections.get(user_id, [])):
+            try:
+                await connection.send_json(message)
+            except Exception:
+                pass
