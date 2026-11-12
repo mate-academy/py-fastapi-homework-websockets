@@ -24,7 +24,7 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        connections = self.active_connections.setdefault(user_data.id, [] )
+        connections = self.active_connections.setdefault(user_data.id, [])
         connections.append(websocket)
         if len(connections) == 1:
             await self._broadcast(
@@ -75,7 +75,7 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
             for connection in list(connections):
                 try:
                     await connection.send_json(message)
-                except Exception as e:
+                except Exception:
                     pass
 
     async def send_personal_message(self, message: dict, user_id: int) -> None:
@@ -92,5 +92,5 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         for connection in list(self.active_connections.get(user_id, [])):
             try:
                 await connection.send_json(message)
-            except Exception as e:
+            except Exception:
                 pass

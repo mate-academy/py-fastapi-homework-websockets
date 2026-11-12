@@ -74,7 +74,7 @@ class UserActivityService(UserActivityServiceInterface):
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        user_activity = self.activity_repo.update_user_activity(
+        user_activity = await self.activity_repo.update_user_activity(
             UpdateUserActivitySchema(
                 user_id=user_id,
                 status="online",
@@ -90,9 +90,11 @@ class UserActivityService(UserActivityServiceInterface):
         try:
             activity_users = await self.activity_repo.get_all_active_users()
             await self.activity_ws_manager.send_personal_message(
-                {"event": "online_users",
-                 "users": [user.model_dump(mode="json") for user in activity_users]
-                 }
+                {
+                    "event": "online_users",
+                    "users": [user.model_dump(mode="json") for user in activity_users]
+                },
+                user_id
             )
             while True:
                 await websocket.receive_json()

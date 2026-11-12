@@ -30,10 +30,10 @@ class UserActivityRepository(UserActivityRepoInterface):
             None
         """
         await self.collections.update_one(
-            {"_id": user_data["_id"]},
+            {"used_id": user_data["user_id"]},
             {
                 "$set": {
-                    "user_id": user_data["_id"],
+                    "user_id": user_data["user_id"],
                     "email": user_data["email"],
                     "status": "offline",
                     "connected_at": None,
@@ -57,13 +57,13 @@ class UserActivityRepository(UserActivityRepoInterface):
             UserActivitySchema: The updated activity record.
         """
         await self.collections.update_one(
-            {"_id": user_data["_id"]},
+            {"user_id": user_data["user_id"]},
             {
                 "$set": {user_data.model_dump(exclude_none=True)}
             },
             upsert=True
         )
-        document = self.collections.find_one(
+        document = await self.collections.find_one(
             {"user_id": user_data["user_id"]},
             {"_id": 0}
         )
