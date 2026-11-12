@@ -30,10 +30,10 @@ class UserActivityRepository(UserActivityRepoInterface):
             None
         """
         await self.collection.update_one(
-            {"user_id": user_data.id},
+            {"user_id": user_data.user_id},
             {
                 "$set": {
-                    "user_id": user_data.id,
+                    "user_id": user_data.user_id,
                     "email": user_data.email,
                     "status": "offline",
                     "connected_at": None,
