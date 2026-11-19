@@ -6,7 +6,7 @@ from fastapi import WebSocket
 from schemas.user_activity import (
     UserBaseDTO,
     UpdateUserActivitySchema,
-    UserActivitySchema
+    UserActivitySchema,
 )
 
 
@@ -27,7 +27,9 @@ class UserActivityRepoInterface(ABC):
         pass
 
     @abstractmethod
-    async def update_user_activity(self, user_data: UpdateUserActivitySchema) -> UpdateUserActivitySchema:
+    async def update_user_activity(
+        self, user_data: UpdateUserActivitySchema
+    ) -> UpdateUserActivitySchema:
         """
         Update a user's activity status.
 
@@ -54,7 +56,9 @@ class UserActivityWebSocketManagerInterface(ABC):
     """Abstract interface for managing active WebSocket connections and broadcasting activity events."""
 
     @abstractmethod
-    async def connect(self, websocket: WebSocket, user_data: UserActivitySchema) -> None:
+    async def connect(
+        self, websocket: WebSocket, user_data: UserActivitySchema
+    ) -> None:
         """
         Register a new WebSocket connection for a user.
 
