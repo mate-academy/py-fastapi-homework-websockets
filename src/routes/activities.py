@@ -5,14 +5,15 @@ from fastapi import APIRouter, Depends, WebSocket
 from user_activity.dependencies import get_user_activity_service
 from user_activity.interfaces import UserActivityServiceInterface
 
-
 users_activity_router = APIRouter()
 
 
 @users_activity_router.websocket("/users/")
 async def users_activity(
     websocket: WebSocket,
-    activity_service: Annotated[UserActivityServiceInterface, Depends(get_user_activity_service)],
+    activity_service: Annotated[
+        UserActivityServiceInterface, Depends(get_user_activity_service)
+    ],
 ) -> None:
     """
     WebSocket endpoint for tracking user online/offline activity.

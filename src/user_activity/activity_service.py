@@ -9,7 +9,7 @@ from exceptions import TokenExpiredError, InvalidTokenError
 from user_activity.interfaces import (
     UserActivityServiceInterface,
     UserActivityWebSocketManagerInterface,
-    UserActivityRepoInterface
+    UserActivityRepoInterface,
 )
 
 
@@ -17,10 +17,10 @@ class UserActivityService(UserActivityServiceInterface):
     """Coordinates authentication and lifecycle handling for user activity WebSocket connections."""
 
     def __init__(
-            self,
-            manager: UserActivityWebSocketManagerInterface,
-            activity_repo: UserActivityRepoInterface,
-            jwt_auth_manager: JWTAuthManagerInterface
+        self,
+        manager: UserActivityWebSocketManagerInterface,
+        activity_repo: UserActivityRepoInterface,
+        jwt_auth_manager: JWTAuthManagerInterface,
     ) -> None:
         """
         Initialize the service with its collaborating components.
@@ -49,4 +49,65 @@ class UserActivityService(UserActivityServiceInterface):
         Returns:
             None
         """
-        # Write your code here
+        await websocket.accept()
+
+        # 1. Wait for the auth message
+        try:
+            data = await asyncio.wait_for(websocket.receive_json(), timeout=30)
+        except asyncio.TimeoutError:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        except WebSocketDisconnect:
+            return
+
+        token = data.get("token") if isinstance(data, dict) else None
+        if not token:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # 2. Validate the token
+        try:
+            payload = self.jwt_auth_manager.decode_access_token(token)
+        except (TokenExpiredError, InvalidTokenError):
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        user_id = payload.get("user_id")
+        if user_id is None:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # 3. Mark online, register the socket, send the snapshot
+        user_activity = await self.activity_repo.update_user_activity(
+            UpdateUserActivitySchema(
+                user_id=user_id,
+                status="online",
+                connected_at=datetime.now(timezone.utc),
+            )
+        )
+        await self.activity_ws_manager.connect(websocket, user_activity)
+
+        active_users = await self.activity_repo.get_all_active_users()
+        await self.activity_ws_manager.send_personal_message(
+            {
+                "event": "online_users",
+                "users": [user.model_dump(mode="json") for user in active_users],
+            },
+            user_id,
+        )
+
+        # 4. Keep the connection alive until the client leaves
+        try:
+            while True:
+                await websocket.receive_json()
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await self.activity_ws_manager.disconnect(user_id, websocket)
+            await self.activity_repo.update_user_activity(
+                UpdateUserActivitySchema(
+                    user_id=user_id,
+                    status="offline",
+                    disconnected_at=datetime.now(timezone.utc),
+                )
+            )

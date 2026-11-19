@@ -7,9 +7,11 @@ from config import get_settings, get_jwt_auth_manager
 from security.interfaces import JWTAuthManagerInterface
 from user_activity.activity_repo import UserActivityRepository
 from user_activity.activity_service import UserActivityService
-from user_activity.interfaces import UserActivityWebSocketManagerInterface, UserActivityRepoInterface
+from user_activity.interfaces import (
+    UserActivityWebSocketManagerInterface,
+    UserActivityRepoInterface,
+)
 from user_activity.ws_activity_manager import UserActivityWebSocketManager
-
 
 settings = get_settings()
 
@@ -52,7 +54,7 @@ def get_mongo_db_ws(websocket: WebSocket) -> AsyncDatabase:
 
 
 def get_user_activity_repository(
-    db: Annotated[AsyncDatabase, Depends(get_mongo_db)]
+    db: Annotated[AsyncDatabase, Depends(get_mongo_db)],
 ) -> UserActivityRepository:
     """
     Build a user activity repository for HTTP routes.
@@ -71,7 +73,7 @@ def get_user_activity_repository(
 
 
 def get_user_activity_repository_ws(
-    db: Annotated[AsyncDatabase, Depends(get_mongo_db_ws)]
+    db: Annotated[AsyncDatabase, Depends(get_mongo_db_ws)],
 ) -> UserActivityRepository:
     """
     Build a user activity repository for the WebSocket route.
@@ -105,18 +107,13 @@ def get_user_activity_ws_manager(websocket: WebSocket) -> UserActivityWebSocketM
 
 
 def get_user_activity_service(
-        auth_manager: Annotated[
-            JWTAuthManagerInterface,
-            Depends(get_jwt_auth_manager)
-        ],
-        activity_ws_manager: Annotated[
-            UserActivityWebSocketManagerInterface,
-            Depends(get_user_activity_ws_manager)
-        ],
-        activity_repo: Annotated[
-            UserActivityRepoInterface,
-            Depends(get_user_activity_repository_ws)
-        ]
+    auth_manager: Annotated[JWTAuthManagerInterface, Depends(get_jwt_auth_manager)],
+    activity_ws_manager: Annotated[
+        UserActivityWebSocketManagerInterface, Depends(get_user_activity_ws_manager)
+    ],
+    activity_repo: Annotated[
+        UserActivityRepoInterface, Depends(get_user_activity_repository_ws)
+    ],
 ) -> UserActivityService:
     """
     Assemble a UserActivityService with all of its required dependencies.
@@ -132,5 +129,5 @@ def get_user_activity_service(
     return UserActivityService(
         manager=activity_ws_manager,
         activity_repo=activity_repo,
-        jwt_auth_manager=auth_manager
+        jwt_auth_manager=auth_manager,
     )
