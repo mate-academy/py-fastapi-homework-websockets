@@ -56,7 +56,9 @@ class UserActivityRepository(UserActivityRepoInterface):
         Returns:
             UserActivitySchema: The updated activity record.
         """
-        fields = {"status": user_data.status}
+        fields = {}
+        if user_data.status is not None:
+            fields["status"] = user_data.status
         if user_data.connected_at is not None:
             fields["connected_at"] = user_data.connected_at
         if user_data.disconnected_at is not None:

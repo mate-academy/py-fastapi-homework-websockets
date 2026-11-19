@@ -29,7 +29,7 @@ class UserActivityRepoInterface(ABC):
     @abstractmethod
     async def update_user_activity(
         self, user_data: UpdateUserActivitySchema
-    ) -> UpdateUserActivitySchema:
+    ) -> UserActivitySchema:
         """
         Update a user's activity status.
 
