@@ -234,14 +234,15 @@ async def test_user_activity_persisted_in_mongo(
 async def test_second_connection_same_user_does_not_rebroadcast(
         e2e_client: AsyncClient,
         e2e_db_session: AsyncSession,
+        mongo_db: AsyncDatabase,
         reset_db_once_for_e2e: Any,
         seed_user_groups: Any,
         cleanup_mongo_user_activity: Any,
 ) -> None:
     """
-    A single user opening a second tab (second websocket) must not
-    trigger another "user_connected" broadcast to other users, and
-    closing just one of the two tabs must not trigger "user_disconnected".
+    Opening a second tab keeps a single "user_connected" event.
+    Closing either tab records the disconnect in MongoDB. A "user_disconnected"
+    event is sent when the last tab closes.
     """
     user1_id, token1 = await _register_activate_and_login(
         e2e_client, e2e_db_session, email="two_tabs@example.com"
@@ -277,6 +278,11 @@ async def test_second_connection_same_user_does_not_rebroadcast(
 
                 with pytest.raises(asyncio.TimeoutError):
                     await asyncio.wait_for(observer_ws.receive_json(), timeout=1.0)
+
+                record = await mongo_db["user_activity"].find_one({"user_id": user1_id})
+                assert record is not None
+                assert record["status"] == "offline"
+                assert record.get("disconnected_at") is not None
 
             disconnect_event = await _receive_json(observer_ws)
             assert disconnect_event["event"] == "user_disconnected", (

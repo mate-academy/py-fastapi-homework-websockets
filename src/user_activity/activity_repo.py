@@ -1,5 +1,6 @@
 from typing import List
 
+from pymongo import ReturnDocument
 from pymongo.asynchronous.database import AsyncDatabase
 
 from schemas.user_activity import UserBaseDTO, UpdateUserActivitySchema, UserActivitySchema
@@ -14,7 +15,7 @@ class UserActivityRepository(UserActivityRepoInterface):
         Initialize the repository with a MongoDB database instance.
 
         Args:
-            db (AsyncDatabase): The Motor async MongoDB database instance.
+            db (AsyncDatabase): The PyMongo async database instance.
         """
         self.db = db
 
@@ -28,14 +29,20 @@ class UserActivityRepository(UserActivityRepoInterface):
         Returns:
             None
         """
-        # Write your code here
+        collection = self.db["user_activity"]
+        await collection.create_index("user_id", unique=True)
+        await collection.update_one(
+            {"user_id": user_data.id},
+            {"$set": {"email": user_data.email, "status": "offline"}},
+            upsert=True,
+        )
 
     async def update_user_activity(
             self,
             user_data: UpdateUserActivitySchema
     ) -> UserActivitySchema:
         """
-        Update (or create) a user's activity record and return the resulting document.
+        Update a user's activity record and return the resulting document.
 
         Args:
             user_data (UpdateUserActivitySchema): Fields to update on the user's activity record.
@@ -43,7 +50,16 @@ class UserActivityRepository(UserActivityRepoInterface):
         Returns:
             UserActivitySchema: The updated activity record.
         """
-        # Write your code here
+        updates = user_data.model_dump(exclude={"user_id"}, exclude_none=True)
+        document = await self.db["user_activity"].find_one_and_update(
+            {"user_id": user_data.user_id},
+            {"$set": updates},
+            projection={"_id": 0},
+            return_document=ReturnDocument.AFTER,
+        )
+        if document is None:
+            raise LookupError(f"No activity record for user {user_data.user_id}")
+        return UserActivitySchema.model_validate(document)
 
     async def get_all_active_users(self) -> List[UserActivitySchema]:
         """
@@ -52,4 +68,5 @@ class UserActivityRepository(UserActivityRepoInterface):
         Returns:
             List[UserActivitySchema]: A list of activity records for all online users.
         """
-        # Write your code here
+        users = self.db["user_activity"].find({"status": "online"}, {"_id": 0})
+        return [UserActivitySchema.model_validate(user) async for user in users]

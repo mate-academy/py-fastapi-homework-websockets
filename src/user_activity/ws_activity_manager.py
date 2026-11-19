@@ -1,5 +1,8 @@
-from fastapi import WebSocket
+from asyncio import Lock
 from typing import Dict, List
+
+from fastapi import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 
 from schemas.user_activity import UserActivitySchema
 from user_activity.interfaces import UserActivityWebSocketManagerInterface
@@ -11,6 +14,10 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
     def __init__(self) -> None:
         """Initialize an empty mapping of user IDs to their active WebSocket connections."""
         self.active_connections: Dict[int, List[WebSocket]] = {}
+        self._connection_lock = Lock()
+
+    def connection_lock(self) -> Lock:
+        return self._connection_lock
 
     async def connect(self, websocket: WebSocket, user_data: UserActivitySchema) -> None:
         """
@@ -24,7 +31,13 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        connections = self.active_connections.setdefault(user_data.user_id, [])
+        connections.append(websocket)
+        if len(connections) == 1:
+            await self._broadcast(
+                {"event": "user_connected", "user": user_data.model_dump(mode="json")},
+                exclude=user_data.user_id,
+            )
 
     async def disconnect(self, user_id: int, websocket: WebSocket) -> None:
         """
@@ -38,7 +51,13 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        connections = self.active_connections.get(user_id)
+        if connections is None or websocket not in connections:
+            return
+        connections.remove(websocket)
+        if not connections:
+            del self.active_connections[user_id]
+            await self._broadcast({"event": "user_disconnected", "user_id": user_id})
 
     async def _broadcast(self, message: dict, exclude: int = None) -> None:
         """
@@ -51,7 +70,13 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        recipients = [
+            websocket
+            for user_id, connections in self.active_connections.items()
+            if user_id != exclude
+            for websocket in connections
+        ]
+        await self._send_to_connections(message, recipients)
 
     async def send_personal_message(self, message: dict, user_id: int) -> None:
         """
@@ -64,4 +89,17 @@ class UserActivityWebSocketManager(UserActivityWebSocketManagerInterface):
         Returns:
             None
         """
-        # Write your code here
+        recipients = self.active_connections.get(user_id, []).copy()
+        await self._send_to_connections(message, recipients)
+
+    @staticmethod
+    async def _send_to_connections(message: dict, recipients: List[WebSocket]) -> None:
+        for websocket in recipients:
+            try:
+                await websocket.send_json(message)
+            except WebSocketDisconnect:
+                # The receiving service cleans up this connection when it disconnects.
+                continue
+            except RuntimeError:
+                if WebSocketState.DISCONNECTED not in (websocket.client_state, websocket.application_state):
+                    raise
